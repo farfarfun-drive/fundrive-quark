@@ -30,7 +30,7 @@ uv add fundrive-quark
 
 | 名字 | 值 |
 |---|---|
-| GitHub 仓库 | `farfarfun/fundrive-quark` |
+| GitHub 仓库 | `farfarfun-fundrive/fundrive-quark` |
 | PyPI 发布名 | `fundrive-quark` |
 | 导入路径 | `fundrives.quark` |
 
