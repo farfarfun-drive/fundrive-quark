@@ -1,7 +1,7 @@
 # fundrive-quark
 
 夸克网盘（Quark）Web API 封装，提供分享链接解析、文件转存、文件列表、
-文件夹批量分享等常用能力，供 [fundrive](https://github.com/farfarfun/fundrive)
+文件夹批量分享等常用能力，供 [fundrive](https://github.com/farfarfun-fundrive/fundrive)
 及其他项目以统一命名空间接入夸克网盘。
 
 ## 环境要求
