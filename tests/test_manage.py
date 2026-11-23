@@ -771,3 +771,69 @@ def test_get_file_list_encodes_fetch_total_as_flag():
     with mock.patch.object(drive, "request", return_value={"data": {"list": []}}) as m:
         drive.get_file_list(fetch_total=False)
     assert m.call_args.kwargs["params"]["_fetch_total"] == "0"
+
+
+def test_request_does_not_mutate_caller_params():
+    """`request()` 不能原地修改调用方传入的 params 字典。"""
+    drive = _make_manage()
+    caller_params = {"pdir_fid": "0"}
+    response = mock.Mock()
+    response.json.return_value = {"status": 200}
+    with mock.patch("fundrives.quark.manage.requests.request", return_value=response):
+        drive.request("file/sort", params=caller_params)
+    assert caller_params == {"pdir_fid": "0"}
+
+
+def test_get_detail_stops_on_exact_page_multiple():
+    """当 `_total` 恰好是 `_size` 的整数倍时，取完最后一页后应立即停止，不再多发一页请求。"""
+    drive = _make_manage()
+
+    def _item(fid: str):
+        return {
+            "fid": fid,
+            "file_name": f"{fid}.txt",
+            "file_type": 1,
+            "dir": False,
+            "pdir_fid": "0",
+            "share_fid_token": f"tok-{fid}",
+            "status": 1,
+        }
+
+    pages = [
+        {
+            "data": {"is_owner": 0, "list": [_item("1"), _item("2")]},
+            "metadata": {"_total": 4, "_size": 2, "_count": 2},
+        },
+        {
+            "data": {"is_owner": 0, "list": [_item("3"), _item("4")]},
+            "metadata": {"_total": 4, "_size": 2, "_count": 2},
+        },
+    ]
+    with mock.patch.object(drive, "request", side_effect=pages) as req:
+        is_owner, file_list = drive.get_detail("pwd", "tok", size=2)
+
+    assert is_owner == 0
+    assert [f["fid"] for f in file_list] == ["1", "2", "3", "4"]
+    assert req.call_count == 2
+
+
+def test_share_breaks_when_page_list_empty_or_size_zero():
+    """服务端返回空列表或 `_size=0` 时，`share()` 分页循环应安全终止，不得死循环。"""
+    drive = _make_manage()
+    weird = {"data": {"list": []}, "metadata": {"_total": 100, "_size": 0, "_page": 1}}
+    with mock.patch.object(drive, "get_file_list", return_value=weird) as m:
+        assert drive.share("https://pan.quark.cn/list#/list/all/abc-x") == []
+    assert m.call_count == 1
+
+
+def test_task_id_helpers_raise_domain_error_on_empty_data():
+    """接口返回 `data: None` 时应抛 QuarkPanError 而非裸 TypeError/AttributeError。"""
+    drive = _make_manage()
+    err_resp = {"status": 400, "data": None, "message": "invalid share"}
+    with mock.patch.object(drive, "request", return_value=err_resp):
+        with pytest.raises(QuarkPanError, match="invalid share"):
+            drive.get_share_save_task_id("pwd", "tok", ["f1"], ["t1"])
+        with pytest.raises(QuarkPanError, match="invalid share"):
+            drive.save_task_id("pwd", "tok", "f1", "t1")
+        with pytest.raises(QuarkPanError, match="invalid share"):
+            drive.share_task_id("f1", "name")

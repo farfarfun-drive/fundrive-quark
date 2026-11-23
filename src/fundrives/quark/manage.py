@@ -246,7 +246,7 @@ class QuarkPanManage:
                 异常信息中带上接口路径、HTTP 状态码与响应片段。
         """
         url = f"{self.base_url}/{uri}"
-        params = params or {}
+        params = dict(params) if params else {}
         params.update(
             {
                 "pr": "ucpro",
@@ -378,7 +378,7 @@ class QuarkPanManage:
                         "status": file["status"],
                     }
                 )
-            if _total <= _size or _count < _size:
+            if not _list or len(file_list) >= _total or _count < _size:
                 return is_owner, file_list
 
         raise QuarkPanError(
@@ -546,7 +546,11 @@ class QuarkPanManage:
         }
 
         json_data = self.request("share/sharepage/save", "post", data=data)
-        task_id = json_data["data"]["task_id"]
+        task_id = (json_data.get("data") or {}).get("task_id")
+        if not task_id:
+            raise QuarkPanError(
+                f"获取转存任务 ID 失败：{json_data.get('message') or json_data}"
+            )
         logger.info(f"获取任务ID：{task_id}")
         return task_id
 
@@ -815,17 +819,23 @@ class QuarkPanManage:
                             )
                             logger.info(f"{n}.分享成功 {first_dir}/{second_dir} 文件夹")
 
+                        second_list = json_data2["data"]["list"]
                         second_total = json_data2["metadata"]["_total"]
                         second_size = json_data2["metadata"]["_size"]
                         second_page = json_data2["metadata"]["_page"]
-                        if second_size * second_page >= second_total:
+                        if (
+                            not second_list
+                            or second_size <= 0
+                            or second_size * second_page >= second_total
+                        ):
                             break
                         second_page += 1
 
+                first_list = json_data["data"]["list"]
                 total = json_data["metadata"]["_total"]
                 size = json_data["metadata"]["_size"]
                 page = json_data["metadata"]["_page"]
-                if size * page >= total:
+                if not first_list or size <= 0 or size * page >= total:
                     break
                 first_page += 1
         except RECOVERABLE_API_ERRORS as e:
@@ -1040,7 +1050,11 @@ class QuarkPanManage:
             "scene": "link",
         }
         json_data = self.request("share/sharepage/save", "POST", data=data)
-        task_id = json_data.get("data").get("task_id")
+        task_id = (json_data.get("data") or {}).get("task_id")
+        if not task_id:
+            raise QuarkPanError(
+                f"获取转存任务 ID 失败：{json_data.get('message') or json_data}"
+            )
         logger.debug(f"获取到转存任务ID：{task_id}")
         return task_id
 
@@ -1089,7 +1103,12 @@ class QuarkPanManage:
             "expired_type": 1,
         }
         response = self.request("share", "POST", data=data)
-        return response.get("data").get("task_id")
+        task_id = (response.get("data") or {}).get("task_id")
+        if not task_id:
+            raise QuarkPanError(
+                f"获取分享任务 ID 失败：{response.get('message') or response}"
+            )
+        return task_id
 
     def get_share_link(self, share_id: str) -> str:
         """根据分享结果 ID 获取最终分享链接。
